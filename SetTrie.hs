@@ -1,5 +1,6 @@
 module SetTrie where
 
+import Control.Arrow
 import Prelude hiding (lookup)
 import Data.List (intercalate, unfoldr)
 import qualified Data.List as L
@@ -36,18 +37,18 @@ delete :: Ord k => Set k -> SetTrie k -> SetTrie k
 delete = update (negate 1)
 
 update :: Ord k => Int -> Set k -> SetTrie k -> SetTrie k
-update n ks (SetTrie s cm bs) = SetTrie (s + n) cm' bs'
+update n ks (SetTrie s cm bs) = SetTrie (s + n) cm' (compress cm' bs')
   where cm' = S.fold (insertWith (+) `flip` n) cm ks
         bs' = case break (flip S.member ks . fst) bs of
-                (xs, (k,t):ys) -> balance cm' (xs ++ (k, update n (S.delete k ks) t) : ys)
-                (bs, [])       -> balance cm' (bs ++ S.fold go [] ks)
+                (xs, (k,t):ys) -> xs ++ (k, update n (S.delete k ks) t) : ys
+                (_, [])        -> bs ++ S.fold go [] ks
         go k []                         = [(k, SetTrie n M.empty            [])]
         go k bs@[(k', SetTrie _ cm _)]  = [(k, SetTrie n (M.insert k' n cm) bs)]
 
 -- what if I used sets as edge labels?
 
-balance :: Ord k => Map k Int -> [(k, SetTrie k)] -> [(k, SetTrie k)]
-balance = curry $ unfoldr nextBranch
+compress :: Ord k => Map k Int -> [(k, SetTrie k)] -> [(k, SetTrie k)]
+compress = curry $ unfoldr nextBranch
 
 nextBranch :: Ord k => (Map k Int, [(k, SetTrie k)]) -> Maybe ( (k, SetTrie k), (Map k Int, [(k, SetTrie k)]) )
 nextBranch (cm, bs) | M.null cm && L.null bs = Nothing
@@ -64,7 +65,25 @@ deleteByMaxValue :: Ord k => Map k Int -> (k, Map k Int)
 deleteByMaxValue = undefined
 
 extractContaining :: Ord k => k -> [(k, SetTrie k)] -> (SetTrie k, [(k, SetTrie k)])
-extractContaining = undefined
+extractContaining k [] = (empty, []) 
+extractContaining k ((k', t@(SetTrie s cm bs)):ts) 
+  | k == k'                   = (t, ts)
+  | M.lookup k cm == Nothing  = second ((k',t):) $ extractContaining k ts
+  | otherwise                 = 
+      let (u, bs')  = extractContaining k bs
+          cm'       = condition u cm
+          s'        = M.fold (+) 0 cm'
+          t'        = SetTrie s' cm' bs'
+      in (unify k' u) *** ((k',t'):) $ extractContaining k ts
+
+-- really should have a version of compress that takes two sets of branches, 
+-- then we could unite them at once
+unify :: Ord k => k -> SetTrie k -> SetTrie k -> SetTrie k
+unify k t@(SetTrie s cm bs) (SetTrie s' cm' bs') = SetTrie (s + s') cm'' (compress cm'' bm'')
+  where cm'' = M.unionWith (+) cm' $ M.insertWith (+) k s cm'
+        bm'' = case break ((==k) . fst) bs' of 
+                (xs, (_,t):ys) -> xs ++ (k, L.foldr (uncurry unify) t bs) : ys
+                (_, [])        -> bs' ++ [(k,t)]
 
 -- most frequent item is first branch
 -- next branch is most frequent conditional on the absense of the earlier
