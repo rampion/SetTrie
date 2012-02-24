@@ -49,11 +49,11 @@ update n ks (SetTrie s cm bs) = SetTrie (s + n) cm' (compress cm' bs')
 -- what if I used sets as edge labels?
 
 compress :: Ord k => Map k Int -> [(k, SetTrie k)] -> [(k, SetTrie k)]
-compress = curry $ unfoldr nextBranch
+compress cm bs = L.filter ((/=0) . support . snd) $ unfoldr nextBranch (cm, bs)
 
 nextBranch :: Ord k => (Map k Int, [(k, SetTrie k)]) -> Maybe ( (k, SetTrie k), (Map k Int, [(k, SetTrie k)]) )
-nextBranch (cm, bs) | M.null cm && L.null bs = Nothing
-                    | M.null cm || L.null bs = error $ "should never happen " ++ show (support . snd $ head bs)
+nextBranch (cm, bs) | M.null cm || L.null bs = Nothing
+                    -- | M.null cm || L.null bs = error $ "should never happen " ++ show (support . snd $ head bs)
                     | otherwise = 
                         let (k, cm') = deleteByMaxValue cm
                             (t, bs') = extractContaining k bs
@@ -106,6 +106,9 @@ member ks (SetTrie s cm bs) | S.null ks = Just s /= fmap fst (M.maxView cm)
 
 fromList :: Ord k => [Set k] -> SetTrie k
 fromList = foldr insert empty
+
+fromLists :: Ord k => [[k]] -> SetTrie k
+fromLists = fromList . map S.fromList
 
 example :: SetTrie Char
 example = fromList [s_abcd, s_abc, s_ab, s_a, s_acd, s_]
