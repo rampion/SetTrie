@@ -8,6 +8,7 @@ import Data.Set hiding (empty, insert, map, fromList, member, delete)
 import qualified Data.Set as S
 import Data.Map hiding (empty, insert, map, fromList, member, delete, update)
 import qualified Data.Map as M
+import Data.Maybe (fromJust)
 
 data SetTrie k = SetTrie { 
   support      :: Int, 
@@ -52,7 +53,7 @@ compress = curry $ unfoldr nextBranch
 
 nextBranch :: Ord k => (Map k Int, [(k, SetTrie k)]) -> Maybe ( (k, SetTrie k), (Map k Int, [(k, SetTrie k)]) )
 nextBranch (cm, bs) | M.null cm && L.null bs = Nothing
-                    | M.null cm || L.null bs = error "should never happen"
+                    | M.null cm || L.null bs = error $ "should never happen " ++ show (support . snd $ head bs)
                     | otherwise = 
                         let (k, cm') = deleteByMaxValue cm
                             (t, bs') = extractContaining k bs
@@ -61,8 +62,13 @@ nextBranch (cm, bs) | M.null cm && L.null bs = Nothing
 condition :: Ord k => SetTrie k -> Map k Int -> Map k Int
 condition (SetTrie _ m' _) m = M.filter (/=0) . M.unionWith (+) m $ fmap negate m'
 
+-- maybe alter to be a Maybe?
 deleteByMaxValue :: Ord k => Map k Int -> (k, Map k Int)
-deleteByMaxValue = undefined
+deleteByMaxValue m = (k, M.delete k m)
+  where k = fst . fromJust . M.foldrWithKey go Nothing $ m
+        go k v Nothing = Just (k,v)
+        go k v j@(Just (k', v')) = if v' >= v then j else Just (k,v)
+
 
 extractContaining :: Ord k => k -> [(k, SetTrie k)] -> (SetTrie k, [(k, SetTrie k)])
 extractContaining k [] = (empty, []) 
